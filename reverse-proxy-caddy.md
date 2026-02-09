@@ -1,6 +1,6 @@
 # 🚦 Ultimate Caddy Web Server & Reverse Proxy Guide
 
-**Repository:** `williamblair333/debian-howto-guides`
+**Repository:** `williamblair333/self-host`
 **OS Target:** Debian 13 (Trixie) - Stable
 **Style:** Docker-First, Production-Ready, Security-Hardened
 
@@ -277,4 +277,5 @@ docker compose up -d
 ```
 
 ### Backups
+
 Back up the `~/caddy_gateway/data` folder. This contains your SSL certificates. If you lose this, you may hit rate limits when setting up a new server as you'll have to request new certs for all domains at once.
