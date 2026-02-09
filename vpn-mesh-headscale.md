@@ -2,50 +2,41 @@
 
 **Repository:** `williamblair333/debian-howto-guides`
 **OS Target:** Debian 13 (Trixie) - Stable
-**Style:** RHCSA-aligned (firewalld, systemd, hardening)
+**Style:** RHCSA-aligned (firewalld, systemd)
 
 ---
 
 ## 📖 Overview
 This guide details how to build a private mesh VPN using [Headscale](https://github.com/juanfont/headscale)—the open-source, self-hosted implementation of the Tailscale coordination server.
 
-This setup avoids major cloud providers (Oracle/AWS/GCP) in favor of independent infrastructure, running on **Debian 13 (Trixie)**. We utilize **Caddy** for automatic SSL management and **firewalld** for enterprise-grade network security.
+This setup avoids "Big Tech" cloud providers in favor of independent infrastructure (e.g., Hetzner, LowEndBox), running on **Debian 13 (Trixie)**. We utilize **Caddy** within the Docker stack for automatic, zero-config SSL management.
 
 ### 🌟 Features
-* **Privacy Focused:** Host on independent infrastructure (Hetzner, etc.).
+* **Privacy Focused:** Host on independent infrastructure.
 * **Unlimited Devices:** No seat limits.
 * **Direct P2P:** WireGuard mesh networking.
 * **Split DNS:** Resolve local services by name.
 
 ---
 
-## 1. 🏗️ Infrastructure: The "No Big Tech" Approach
+## 🛠️ Prerequisites
 
-Since we are avoiding the "Big 3" free tiers, we look for high-trust, low-cost independent providers.
-
-### Recommended Providers
-1.  **Hetzner Cloud (Top Choice):** German-based, privacy-focused, incredible performance.
-    * **Cost:** ~$5/month (Cloud CX22).
-    * **Location:** Germany, Finland, or USA (Ashburn/Hillsboro).
-    * **Specs:** Plenty for Headscale (2 vCPU, 4GB RAM is standard entry now).
-2.  **"LowEndBox" Deals:**
-    * Check sites like [LowEndBox](https://lowendbox.com) for "Annual VPS Deals".
-    * You can often find providers like **RackNerd** or **GreenCloud** offering instances for **$10–$15 per year** (approx $1/mo).
-    * **Requirement:** Ensure you get at least 1GB RAM and a dedicated IPv4 address.
-
-### 1.1 DNS Configuration
-Regardless of the provider, you need a domain (e.g., `vpn.example.com`).
-1.  **A Record:** Point `vpn.example.com` to your VPS IPv4 address.
-2.  **AAAA Record:** (Optional) Point to your VPS IPv6 address.
+1.  **Infrastructure:** A VPS with a static IPv4 address.
+    * *Recommendation:* **Hetzner Cloud** (CPX11/CX22) or a trusted "LowEndBox" deal (~$15/yr).
+    * *Specs:* 1GB RAM minimum.
+2.  **Domain Name:** A subdomain (e.g., `vpn.example.com`) pointing to your VPS Public IP.
+3.  **Docker Environment:**
+    * You **must** have Docker and Docker Compose installed before proceeding.
+    * 👉 **Follow this guide:** [Debian Docker Setup Guide](https://github.com/williamblair333/debian-howto-guides/blob/main/debian-docker-setup-guide.md)
 
 ---
 
-## 2. 🛡️ Host Security & Hardening (RHCSA Style)
+## 1. 🛡️ Host Security & Hardening (RHCSA Style)
 
 We use **`firewalld`** (standard on RHEL/Debian) for managing the firewall zones.
 
-### 2.1 Install & Configure Firewalld
-Debian 13 uses `nftables` backend by default, which `firewalld` manages perfectly.
+### 1.1 Install & Configure Firewalld
+Debian 13 uses `nftables` backend by default, which `firewalld` manages abstractly.
 
 ```bash
 # 1. Update and Install
@@ -58,12 +49,12 @@ sudo systemctl enable --now firewalld
 # 3. Allow SSH (Prevent lockout)
 sudo firewall-cmd --permanent --add-service=ssh
 
-# 4. Allow HTTP/HTTPS (For Caddy/SSL)
+# 4. Allow HTTP/HTTPS (For Caddy SSL challenges)
 sudo firewall-cmd --permanent --add-service=http
 sudo firewall-cmd --permanent --add-service=https
 
 # 5. Allow Headscale WireGuard (UDP) & STUN
-# 41641 is the default Headscale UDP port for P2P traffic
+# Port 41641 is critical for direct P2P connections (no relay)
 sudo firewall-cmd --permanent --add-port=41641/udp
 sudo firewall-cmd --permanent --add-port=3478/udp
 
@@ -71,7 +62,7 @@ sudo firewall-cmd --permanent --add-port=3478/udp
 sudo firewall-cmd --reload
 ```
 
-### 2.2 SSH Hardening
+### 1.2 SSH Hardening
 1.  **Local Machine:** Generate a keypair.
     ```bash
     ssh-keygen -t ed25519 -C "vpn-admin"
@@ -85,7 +76,7 @@ sudo firewall-cmd --reload
     ```
 3.  **Restart SSH:** `sudo systemctl restart ssh`
 
-### 2.3 Fail2Ban
+### 1.3 Fail2Ban
 Crucial for public-facing VPS.
 ```bash
 sudo apt install fail2ban -y
@@ -94,39 +85,21 @@ sudo systemctl enable --now fail2ban
 
 ---
 
-## 3. 🐳 Core Deployment (Docker Compose)
+## 2. 🐳 Core Deployment (Docker Compose)
 
-### 3.1 Install Docker Engine (Debian 13 Trixie)
-```bash
-# Remove conflicting packages
-for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove $pkg; done
+We will deploy Headscale alongside a minimal Caddy container.
+*Note: For advanced Caddy configurations, see the dedicated Caddy guide (coming soon).*
 
-# Add Docker's official GPG key
-sudo apt-get update
-sudo apt-get install ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL [https://download.docker.com/linux/debian/gpg](https://download.docker.com/linux/debian/gpg) -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-# Add the repository
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] [https://download.docker.com/linux/debian](https://download.docker.com/linux/debian) \
-  trixie stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt-get update
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
-```
-
-### 3.2 Directory Setup
+### 2.1 Directory Setup
 ```bash
 mkdir -p ~/headscale/config
 mkdir -p ~/headscale/data
 cd ~/headscale
 ```
 
-### 3.3 `docker-compose.yml`
+### 2.2 `docker-compose.yml`
 Create this file in `~/headscale/`.
+
 ```yaml
 services:
   headscale:
@@ -136,7 +109,7 @@ services:
     volumes:
       - ./config:/etc/headscale
       - ./data:/var/lib/headscale
-    # Headscale runs on 8080 internally; Caddy handles the public 443
+    # Headscale listens internally on 8080
     command: headscale serve
 
   caddy:
@@ -158,45 +131,53 @@ volumes:
   caddy_config:
 ```
 
-### 3.4 `Caddyfile`
-Create this file in `~/headscale/`. Replace `vpn.example.com` with your domain.
+### 2.3 `Caddyfile`
+Create this file in `~/headscale/`. This config tells Caddy to fetch a certificate for your domain and proxy traffic to the Headscale container.
+
+*(Replace `vpn.example.com` with your actual domain)*
+
 ```caddy
 vpn.example.com {
     reverse_proxy headscale:8080
 }
 ```
 
-### 3.5 `config.yaml`
+### 2.4 `config.yaml`
 1.  Download the template:
     ```bash
     wget -O config/config.yaml [https://raw.githubusercontent.com/juanfont/headscale/main/config-example.yaml](https://raw.githubusercontent.com/juanfont/headscale/main/config-example.yaml)
     ```
-2.  **Essential Edits:**
+2.  **Essential Edits:** Open `config/config.yaml` and modify these lines:
+
     ```yaml
+    # 1. The public URL clients will use to connect
     server_url: [https://vpn.example.com](https://vpn.example.com)
+
+    # 2. Listen on all interfaces (Docker handles the mapping)
     listen_addr: 0.0.0.0:8080
-    metrics_listen_addr: 127.0.0.1:9090
     
+    # 3. Database and Key paths (Must match Docker volumes)
     private_key_path: /var/lib/headscale/private.key
     db_type: sqlite3
     db_path: /var/lib/headscale/db.sqlite
     
-    # Optional: Enable MagicDNS
+    # 4. Optional: Enable MagicDNS
     dns_config:
       magic_dns: true
       base_domain: example.net
     ```
 
-### 3.6 Start Service
+### 2.5 Start the Stack
 ```bash
 docker compose up -d
 ```
+Check logs with `docker compose logs -f` to ensure Caddy successfully obtained an SSL certificate.
 
 ---
 
-## 4. 💻 Client Configuration
+## 3. 💻 Client Configuration
 
-Standard Tailscale clients work by simply overriding the login server URL.
+Headscale is compatible with standard Tailscale clients. You simply need to override the **Coordination Server URL**.
 
 ### 🐧 Linux
 ```bash
@@ -208,13 +189,13 @@ sudo tailscale login --login-server [https://vpn.example.com](https://vpn.exampl
 ```
 
 ### 🪟 Windows
-1.  Close Tailscale.
+1.  Close Tailscale completely (Right-click tray icon -> Exit).
 2.  Open **PowerShell (Admin)**.
 3.  Set the override registry key:
     ```powershell
     New-ItemProperty -Path 'HKLM:\SOFTWARE\Tailscale IPN' -Name UnattendedURL -PropertyType String -Value '[https://vpn.example.com](https://vpn.example.com)' -Force
     ```
-4.  Restart Tailscale and Login.
+4.  Restart Tailscale and click **Log in**.
 
 ### 🍏 iOS / 🤖 Android
 1.  **Android:** Open App → Tap "three dots" menu repeatedly (10x) → **Change Server** → Enter `https://vpn.example.com`.
@@ -222,37 +203,48 @@ sudo tailscale login --login-server [https://vpn.example.com](https://vpn.exampl
 
 ---
 
-## 5. ⚡ Management & P2P Optimization
+## 4. ⚡ Management & P2P Optimization
 
-### User Management
-Since Headscale is CLI-based, you run commands inside the Docker container.
+### User Management (CLI)
+Since Headscale is headless, you manage it via `docker exec`.
 
-* **Create Namespace:** `docker exec headscale headscale users create my-admin`
-* **Generate Pre-Auth Key:** `docker exec headscale headscale preauthkeys create -e 24h --user my-admin`
-* **List Nodes:** `docker exec headscale headscale nodes list`
+* **Create a User (Namespace):**
+  ```bash
+  docker exec headscale headscale users create my-admin
+  ```
+* **Generate Pre-Auth Key (For Servers/Headless Nodes):**
+  ```bash
+  docker exec headscale headscale preauthkeys create -e 24h --user my-admin
+  ```
+* **List Connected Nodes:**
+  ```bash
+  docker exec headscale headscale nodes list
+  ```
 
 ### Ensuring Direct P2P (No Relay)
-We want to avoid routing traffic through your VPS to save bandwidth.
+We want to avoid routing traffic through your VPS (DERP Relay) to save bandwidth and reduce latency.
 
-1.  **Check Status:** `tailscale status` on a client.
-    * `direct` = Good (P2P).
-    * `relay` = Bad (Using VPS bandwidth).
-2.  **Fixing Relay:**
+1.  **Check Status:** Run `tailscale status` on a client.
+    * `direct` = **Good** (P2P).
+    * `relay` = **Bad** (Using VPS bandwidth).
+2.  **Fixing Relay Issues:**
     * Verify VPS Firewall allows UDP `41641`.
-    * **Home Routers:** Enable UPnP or forward UDP `41641` to your desktop/laptop IP.
-    * **Test:** `tailscale ping <node-ip>` forces NAT traversal attempts.
+    * **Home Routers:** Enable UPnP or manually forward UDP `41641` to your local machine's IP.
+    * **Test:** `tailscale ping <node-ip>` forces a P2P path discovery attempt.
 
 ---
 
-## 6. 🧹 Maintenance (Debian 13)
+## 5. 🧹 Maintenance (Debian 13)
 
 ### Unattended Upgrades
 Keep the system patched automatically.
 ```bash
 sudo apt install unattended-upgrades -y
-# Standard Debian config usually enables this by default, verify with:
+# Verify status
 systemctl status unattended-upgrades
 ```
 
 ### Backups
-Backup the `~/headscale/data/db.sqlite` file. This is the "brain" of your network.
+The entire state of your VPN is contained in the `./data` folder.
+* **Critical File:** `~/headscale/data/db.sqlite`
+* **Strategy:** Add a cron job to copy this file to a secure location (e.g., S3 or Rclone) nightly.
