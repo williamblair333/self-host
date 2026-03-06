@@ -1,0 +1,14 @@
+Port 22
+ListenAddress 0.0.0.0
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+PermitRootLogin no
+PasswordAuthentication yes
+ChallengeResponseAuthentication no
+UsePAM no
+Subsystem sftp internal-sftp
+Match User sftp
+    ChrootDirectory /chroot
+    ForceCommand internal-sftp
+    AllowTcpForwarding no
+    X11Forwarding no

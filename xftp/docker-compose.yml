@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+
+  tftp:
+    build: ./tftp
+    container_name: fileserver-tftp
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ${FILES_DIR:-./files}:/files
+
+  sftp:
+    build: ./sftp
+    container_name: fileserver-sftp
+    restart: unless-stopped
+    ports:
+      - "2222:22"
+    environment:
+      - SFTP_USER=${SFTP_USER:-lab}
+      - SFTP_PASS=${SFTP_PASS:-lab}
+    volumes:
+      - ${FILES_DIR:-./files}:/chroot/files
+      - sftp-hostkeys:/etc/ssh
+
+  ftp:
+    build: ./ftp
+    container_name: fileserver-ftp
+    restart: unless-stopped
+    ports:
+      - "21:21"
+      - "${PASV_MIN:-21000}-${PASV_MAX:-21010}:${PASV_MIN:-21000}-${PASV_MAX:-21010}"
+    volumes:
+      - ${FILES_DIR:-./files}:/ftp
+    environment:
+      - FTP_USER=${FTP_USER:-lab}
+      - FTP_PASS=${FTP_PASS:-lab}
+      - PASV_ADDRESS=${PASV_ADDRESS:-10.33.1.38}
+      - PASV_MIN=${PASV_MIN:-21000}
+      - PASV_MAX=${PASV_MAX:-21010}
+
+  http:
+    image: filebrowser/filebrowser:latest   # scratch/Go binary — no debian variant exists
+    container_name: fileserver-http
+    restart: unless-stopped
+    ports:
+      - "8888:80"
+    volumes:
+      - ${FILES_DIR:-./files}:/srv
+      - filebrowser-db:/database
+    environment:
+      - FB_NOAUTH=${HTTP_AUTH:-true}
+
+volumes:
+  sftp-hostkeys:
+  filebrowser-db:
