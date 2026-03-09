@@ -526,11 +526,64 @@ curl -s http://localhost:8888/api/resources/ | grep shared-test
 
 ## 🔥 Firewall
 
-### Restrict all services to LAN subnet only
+### ⚠️ TFTP and ufw: Critical Behaviour
+
+TFTP uses **ephemeral ports for data transfer**. The initial request goes to UDP/69, but tftpd responds from a random high port. With ufw's default `deny (incoming)` policy, this creates two distinct failure modes:
+
+| Symptom | Cause |
+|---------|-------|
+| Client hangs, server sees no packets in tcpdump | Server firewall blocking UDP/69 inbound |
+| Server sees packets, responds, client still hangs | **Client** firewall blocking ephemeral response ports |
+
+The second case is the more surprising one — the client's firewall drops tftpd's reply because it arrives on an unexpected port and ufw treats it as a new unsolicited connection.
+
+**The kernel conntrack helper `nf_conntrack_tftp` is required on both the server AND the client** to teach netfilter that ephemeral-port TFTP replies are RELATED to the original request.
+
+```bash
+# Load on server AND client
+sudo modprobe nf_conntrack_tftp
+
+# Make persistent across reboots (server and client)
+echo 'nf_conntrack_tftp' | sudo tee /etc/modules-load.d/nf_conntrack_tftp.conf
+```
+
+Then allow RELATED,ESTABLISHED on both ends:
+
+```bash
+# Server and client — allow established/related (ufw persistent equivalent)
+sudo iptables -I INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+```
+
+> **Note:** If `nf_conntrack_tftp` is loaded but conntrack still doesn't classify TFTP responses as RELATED (can happen with newer kernels), fall back to explicitly allowing UDP from the server on the client:
+> ```bash
+> sudo ufw allow from <server-ip> to any port 1024:65535 proto udp comment "TFTP responses"
+> ```
+
+---
+
+### TFTP — Open to all (recommended for multi-subnet labs)
+
+Subnet-scoped rules **will silently fail** when clients come from a different subnet. In a multi-subnet lab environment, just open TFTP:
 
 ```bash
 clear
-sudo ufw allow from 10.33.1.0/24 to any port 69  proto udp comment "TFTP lab"
+sudo ufw allow 69/udp comment "TFTP"
+sudo ufw reload
+```
+
+Or scope to a specific interface if you have a defined internal NIC:
+
+```bash
+clear
+# Replace wlan0/eth0 with your LAN interface
+sudo ufw allow in on eth0 to any port 69 proto udp comment "TFTP LAN interface"
+sudo ufw reload
+```
+
+### All other services — restrict to subnet
+
+```bash
+clear
 sudo ufw allow from 10.33.1.0/24 to any port 21  proto tcp comment "FTP lab"
 sudo ufw allow from 10.33.1.0/24 to any port 2222 proto tcp comment "SFTP lab"
 sudo ufw allow from 10.33.1.0/24 to any port 8888 proto tcp comment "Fileserver HTTP"
@@ -593,7 +646,9 @@ copy tftp running-config
 | TFTP container not using host networking | Verify `network_mode: host` in compose |
 | File not in `files/` dir | Check `ls files/` on host |
 | `files/` not world-readable | `chmod 777 files && chmod 644 files/*` |
-| Firewall blocking UDP/69 | Add ufw rule or check `sudo ufw status` |
+| Firewall blocking UDP/69 on server | Add ufw rule — use open rule, not subnet-scoped (see Firewall section) |
+| IOS device on different subnet than ufw rule | Subnet-scoped rules silently fail; open TFTP to all: `sudo ufw allow 69/udp` |
+| `nf_conntrack_tftp` not loaded | `sudo modprobe nf_conntrack_tftp` on server |
 
 ---
 
@@ -684,7 +739,60 @@ tcp   LISTEN  0.0.0.0:8888   *        users:(("docker-proxy",...))
 ### TFTP
 
 <details>
-<summary><strong>Transfer times out or hangs</strong></summary>
+<summary><strong>Transfer times out or hangs — diagnosis workflow</strong></summary>
+
+TFTP timeouts have several distinct root causes. Use tcpdump to identify which stage is failing before changing anything.
+
+**Step 1 — Run tcpdump on the SERVER while client attempts transfer:**
+
+```bash
+# Watch all traffic to/from the client (not just port 69 — TFTP uses ephemeral ports for data)
+sudo tcpdump -i any -n host <client-ip>
+```
+
+**Interpret results:**
+
+| Server tcpdump shows | Meaning | Fix |
+|----------------------|---------|-----|
+| Nothing at all | Packet never arrives — routing issue or wrong IP | Check `ip route get <client-ip>` on server; verify client is sending to correct IP |
+| `In` packets on port 69, no `Out` response | Server firewall blocking — ufw dropping before tftpd responds | See firewall section below |
+| `In` packets on 69, `Out` packets on ephemeral port | Server is responding — **client firewall is dropping the reply** | Load `nf_conntrack_tftp` on client; allow RELATED,ESTABLISHED or add explicit ufw rule on client |
+
+**Step 2 — Check server firewall:**
+
+```bash
+# Is default incoming policy deny?
+sudo ufw status verbose | head -5
+# "Default: deny (incoming)" = ufw will block TFTP responses by default
+
+# Is nf_conntrack_tftp loaded?
+lsmod | grep tftp
+# If empty, load it:
+sudo modprobe nf_conntrack_tftp
+
+# Is RELATED,ESTABLISHED allowed?
+sudo iptables -L INPUT -n | grep RELATED
+```
+
+**Step 3 — Check client firewall (easy to miss):**
+
+```bash
+# On the CLIENT machine:
+sudo ufw status verbose | head -5
+# If "deny (incoming)" — the client is blocking tftpd's ephemeral-port responses
+
+# Load conntrack helper on client:
+sudo modprobe nf_conntrack_tftp
+
+# Allow RELATED,ESTABLISHED on client:
+sudo iptables -I INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# If conntrack still doesn't classify TFTP as RELATED, explicitly allow UDP from server:
+sudo ufw allow from <server-ip> to any port 1024:65535 proto udp comment "TFTP responses"
+sudo ufw reload
+```
+
+**Step 4 — Verify container and files:**
 
 ```bash
 # Verify host networking is active
@@ -696,9 +804,43 @@ ss -ulpn | grep 69
 
 # Verify file permissions (tftpd runs as nobody)
 ls -la files/
-# Files must be world-readable: -rw-rw-r-- or -rw-r--r--
+# Files must be world-readable: -rw-r--r-- or 644
 chmod 644 files/*
 chmod 777 files
+```
+
+**Make conntrack persistent across reboots (both server and client):**
+
+```bash
+echo 'nf_conntrack_tftp' | sudo tee /etc/modules-load.d/nf_conntrack_tftp.conf
+```
+
+</details>
+
+<details>
+<summary><strong>Subnet mismatch — client on different subnet than ufw rule</strong></summary>
+
+This is a silent failure — ufw drops the packets without logging by default, and the client just sees a timeout.
+
+```bash
+# Confirm which subnet the client is actually on:
+# (run on client)
+ip addr show
+
+# Check what your ufw rule allows:
+sudo ufw status numbered | grep 69
+```
+
+If the client is on a different subnet (e.g., rule allows `10.33.1.0/24` but client is `10.71.1.x`), either update the rule or open TFTP fully:
+
+```bash
+# Open to all (recommended for multi-subnet labs)
+sudo ufw allow 69/udp comment "TFTP"
+sudo ufw reload
+
+# Remove old subnet-scoped rule
+sudo ufw status numbered | grep 69
+sudo ufw delete <number>
 ```
 
 </details>
@@ -861,7 +1003,7 @@ docker compose restart http
 
 | Risk | Mitigation |
 |------|-----------|
-| TFTP has no auth | Restrict to LAN via ufw; consider binding to specific interface |
+| TFTP has no auth | Open to all on LAN (subnet rules break multi-subnet labs); bind to specific interface for tighter control |
 | FTP sends credentials in plaintext | Use SFTP for anything sensitive; FTP only for legacy device compat |
 | Default credentials | Change `lab`/`lab` in `.env` before deployment |
 | HTTP filebrowser default admin/admin | Enable auth (`HTTP_AUTH=false`) and change password immediately |
