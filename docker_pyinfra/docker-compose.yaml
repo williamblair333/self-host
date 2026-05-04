@@ -1,0 +1,21 @@
+version: '3'
+services:
+    pyinfra:
+        #image: localhost:5000/pyinfra:2.5.3
+        image: pyinfra:2.5.3
+        restart: unless-stopped
+        networks:
+            <network_name>:
+                ipv4_address: <ip_address>
+        ports:
+            - "22:22"
+
+        volumes:
+            - ./pyinfra:/home/pyinfra/pyinfra
+            - ./.ssh:/home/ansible/.ssh:rw            
+            
+        stdin_open: true # docker run -i
+        tty: true        # docker run -t
+networks:
+  <network_name>:
+    external: true

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+    bullseye-test:
+        restart: always
+        image: localhost:5000/bs_test:latest
+        user: root
+        container_name: bs_test
+        
+        volumes:
+            - ./data:/opt/data:rw
+        command: '/bin/bash'
+        ports:
+            - "8081:80"
+            - "2200:22"
+        tty: true
+
+
+volumes:
+    data:
+
+            

@@ -1,0 +1,15 @@
+version: '3'
+services:
+  web:
+    build: .
+    ports:
+      - "80:80"
+      - "2222:22"
+      - "22443:443"
+    networks:
+      caddy:
+        ipv4_address: 172.16.0.20
+        
+networks:
+  caddy:
+    external: true

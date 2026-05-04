@@ -1,0 +1,26 @@
+
+#CMD ["/usr/sbin/sshd","-D"]
+RUN service ssh start
+#################################################################################
+
+docker run -d -p 5000:5000 --name registry registry:2.7
+
+sudo chmod +x *.sh
+docker build --tag bs_test .
+
+docker tag bs_test localhost:5000/bs_test:latest
+docker push localhost:5000/bs_test:latest
+
+docker-compose up
+
+docker container list --all
+docker container stop bs_test
+docker container rm bs_test
+docker container list --all
+
+docker image list --all
+docker rmi
+
+
+
+docker exec -it bs_test /bin/bash

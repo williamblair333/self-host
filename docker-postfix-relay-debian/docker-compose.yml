@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  mail-relay:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "25:25"
+    volumes:
+      - ./main.cf:/etc/postfix/main.cf
+      - ./hosts:/etc/hosts

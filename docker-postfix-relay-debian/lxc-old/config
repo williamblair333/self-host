@@ -1,0 +1,31 @@
+# Template used to create this container: /usr/share/lxc/templates/lxc-download
+# Parameters passed to the template: -d debian -r buster -a amd64 --keyserver hkp://keys.openpgp.org:80
+# Template script checksum (SHA-1): checksum goes here...
+# For additional config options, please look at lxc.container.conf(5)
+
+# Uncomment the following line to support nesting containers:
+#lxc.include = /usr/share/lxc/config/nesting.conf
+# (Be aware this has security implications)
+
+#Original
+
+# Distribution configuration
+lxc.include = /usr/share/lxc/config/common.conf
+lxc.include = /usr/share/lxc/config/userns.conf
+lxc.arch = linux64
+
+# Container specific configuration
+#lxc.apparmor.profile = generated
+lxc.apparmor.profile = unconfined
+lxc.apparmor.allow_nesting = 1
+lxc.idmap = u 0 100000 65536
+lxc.idmap = g 0 100000 65536
+lxc.rootfs.path = dir:/home/lxc/.local/share/lxc/relay1/rootfs
+lxc.uts.name = relay1
+
+# Network configuration
+#lxc.net.0.type = empty
+lxc.net.0.type = veth
+lxc.net.0.link = virbr0
+lxc.net.0.flags = up
+lxc.start.auto = 1

@@ -1,0 +1,25 @@
+version: '3'
+services:
+    simple-help:
+        #image: localhost:5000/simple-help:5.4.5
+        image: simple-help:5.4.5
+        restart: unless-stopped
+        networks:
+            <network_name>:
+                ipv4_address: <ip_address>
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./shlicense.txt:/opt/SimpleHelp/shlicense.txt:rw
+            #uncomment if you're move existing install to another server or
+            #when you get server setup properly then you can copy from the 
+            #container to the host for backup & easy migration purposes. Like this:
+            #docker cp <container_name>:/opt/SimpleHelp <host_directory>/SimpleHelp
+            #- ./SimpleHelp:/opt/SimpleHelp:rw
+            
+        stdin_open: true # docker run -i
+        tty: true        # docker run -t
+networks:
+  <network_name>:
+    external: true 

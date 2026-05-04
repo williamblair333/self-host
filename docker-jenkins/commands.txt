@@ -1,0 +1,48 @@
+git add * && git commit -m "add msg" && git push
+
+docker run -d -p 5000:5000 --name registry registry:2.8
+
+docker-compose down
+docker rmi -f jenkins-v1 && docker rmi -f localhost:5000/jenkins-v1 && docker container stop jenkins-v1 && docker container rm jenkins-v1
+
+sudo chmod +x *.sh
+#cp Dockerfile /opt/docker/jenkins-v1
+sudo docker build --tag jenkins-v1 .
+
+docker tag jenkins-v1 localhost:5000/jenkins-v1:latest
+docker push localhost:5000/jenkins-v1:latest
+docker-compose up -d
+
+docker exec -it jenkins-v1 /bin/bash
+
+apt-get update && apt-get install nano
+
+mkdir /var/www/html/grav/user/plugins
+
+chown -R www-data:www-data /var/www/html && chmod -R 0644 /var/www/html/grav/
+chown -R www-data:www-data /var/www/html && chmod -R 0777 /var/www/html/grav/
+
+#need to unzip file from https://github.com/getgrav/grav/releases/download/1.7.34/grav-admin-v1.7.34.zip into user
+
+service apache2 restart
+
+php bin/grav composer
+cd /var/www/html/grav/ && bin/grav server
+
+nano /var/log/apache2/error.log
+docker exec -it jenkins-v1 /bin/bash
+cd /var/www/html/grav/ && bin/grav server
+
+ps aux | grep apache
+ps aux | grep grav
+ 
+
+docker container list --all
+docker container stop jenkins-v1
+docker container rm jenkins-v1
+docker container list --all
+
+docker image list --all
+docker rmi
+
+docker exec -it jenkins-v1 /bin/bash

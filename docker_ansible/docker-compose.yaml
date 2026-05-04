@@ -1,0 +1,26 @@
+version: '3'
+services:
+    ansible:
+        #image: localhost:5000/ansible:2.13
+        image: ansible:2.13
+        restart: unless-stopped
+        networks:
+            <network>:
+                ipv4_address: <ip_address>
+        ports:
+            - "22:22"
+
+        volumes:
+            - ./ansible.cfg:/etc/ansible/ansible.cfg:rw
+            - ./.ssh:/home/ansible/.ssh:rw            
+            - ./hosts:/etc/ansible/hosts:rw
+            - ./collections:/home/ansible/.ansible/collections:rw
+            - ./playbooks:/home/ansible/.ansible/playbooks:rw
+            - ./roles:/home/ansible/.ansible/roles:rw
+            - ./tasks:/home/ansible/.ansible/tasks:rw
+            
+        stdin_open: true # docker run -i
+        tty: true        # docker run -t
+networks:
+  <network>:
+    external: true

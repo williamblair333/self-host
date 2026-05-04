@@ -1,0 +1,40 @@
+# Network interfaces and IP protocols
+# Specifies all available network interfaces that Postfix should bind to.
+inet_interfaces = all
+# Specifies IPv4 protocol for network operations.
+inet_protocols = ipv4
+
+# Relay settings
+# Specifies the next-hop destination for relayed mail.
+relayhost = [my.maildomain.com]:25
+# Defines domains for which this machine will relay mail.
+relay_domains = maildomain.com
+
+# TLS settings for encrypted communication
+# Enables the use of TLS, if possible, for outgoing SMTP connections.
+smtp_use_tls = no
+# Sets the desired security level for outgoing SMTP connections. 'encrypt' requires encryption.
+smtp_tls_security_level = none
+# Logs the hostname of a remote SMTP server if it supports STARTTLS, but is not configured for encryption.
+smtp_tls_note_starttls_offer = yes
+
+# Miscellaneous
+# The domain name that locally-posted mail appears to come from.
+myorigin = /etc/mailname
+# The internet hostname of the Postfix system. Used in various message headers.
+myhostname = relay1.maildomain.com
+# The list of domains that this mail system considers itself the final destination for.
+mydestination = 
+# Limits the maximum size of any message. Setting it to '0' means no limit.
+mailbox_size_limit = 0
+# Delimiter for address extensions (user+foo).
+recipient_delimiter = +
+# Postfix compatibility level. It's used to specify with which Postfix version to maintain backward compatibility.
+compatibility_level = 2
+
+# Local network relay
+# Specifies the list of trusted networks or network addresses.
+mynetworks = 192.168.1.0/24 192.168.2.1
+# Specifies relay restrictions for incoming mail. Here, it allows relaying from the specified networks or authenticated users.
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, defer_unauth_destination
+

@@ -1,0 +1,50 @@
+#CMD ["/usr/sbin/sshd","-D"]
+RUN service ssh start
+git add * && git commit -m "update" && git push
+
+docker run -d -p 5000:5000 --name registry registry:2.8
+
+docker-compose down
+docker rmi -f nextcloud:24.0.2-apache && docker rmi -f localhost:5000/nextcloud:24.0.2-apache && docker container stop nextcloud-24-apache && docker container rm nextcloud-24-apache
+
+sudo chmod +x *.sh
+#cp Dockerfile /opt/docker/nextcloud-24-apache
+sudo docker build --tag nextcloud-24-apache .
+
+docker tag nextcloud:24.0.2-apache localhost:5000/nextcloud:24.0.2-apache
+docker push localhost:5000/nextcloud:24.0.2-apache
+docker-compose up -d
+
+docker exec -it nextcloud-24-apache /bin/bash
+
+apt-get update && apt-get install nano
+
+mkdir /var/www/html/grav/user/plugins
+
+sudo chown -R www-data:www-data /var/www/html && sudo chmod -R 0644 /var/www/html/grav/
+sudo chown -R www-data:www-data /var/www/html && sudo chmod -R 0777 /var/www/html/grav/
+
+#need to unzip file from https://github.com/getgrav/grav/releases/download/1.7.34/grav-admin-v1.7.34.zip into user
+
+service apache2 restart
+
+php bin/grav composer
+cd /var/www/html/grav/ && bin/grav server
+
+nano /var/log/apache2/error.log
+docker exec -it nextcloud-24-apache /bin/bash
+cd /var/www/html/grav/ && bin/grav server
+
+ps aux | grep apache
+ps aux | grep grav
+ 
+
+docker container list --all
+docker container stop nextcloud-24-apache
+docker container rm nextcloud-24-apache
+docker container list --all
+
+docker image list --all
+docker rmi
+
+docker exec -it nextcloud-24-apache /bin/bash

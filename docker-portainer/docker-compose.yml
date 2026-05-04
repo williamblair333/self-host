@@ -1,0 +1,26 @@
+version: '3.7'
+services:
+  portainer:
+    image: portainer/portainer-ce
+    environment:
+      LC_ALL:  en_US.UTF-8
+      TZ:  America/New_York
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
+    mem_limit: 500m
+    cpus: 0.5
+    restart: on-failure:5
+    privileged: true
+    read_only: false
+    tmpfs:
+      - /tmp
+      - /run
+      - /var # Ensuring writable areas where necessary
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
